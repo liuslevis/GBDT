@@ -3,26 +3,73 @@
 import numpy as np
 from sklearn import tree
 from sklearn.datasets import load_iris
+import weakref
 
-iris = load_iris()
+STOP_NUM = -999999
 
-X = np.array([
-    [1,],
-    [2,],
-    [3,],
-    [4,],
+class Node(object):
+    """docstring for Node"""
+    def __init__(self, j, s, c, root=None, left=None, right=None):
+        super(Node, self).__init__()
+        self.j = j
+        self.s = s
+        self.c = c
+        self.root = root #weakref.ref(root) if root else None
+        self.left = left
+        self.right = right
+        
+    def count(self):
+        left_cnt  = self.left.count()  if self.left  else 0
+        right_cnt = self.right.count() if self.right else 0
+        return 1 + left_cnt + right_cnt
 
-    ], dtype=np.float64)
-y = np.array([.1, .2, .3, .4])
+    def depth(self):
+        q = [self.root]
+        max_depth = 0
+        while True:
+            if len(q) == 0:
+                break
+            p = []
+            for node in q:
+                if node == self:
+                    break
+                if node and node.left:
+                    p.append(node.left)
+                if node and node.right:
+                    p.append(node.right)
+            q = p
+            max_depth += 1
 
+        return max_depth
+
+    def depth_to_leaf(self):
+        left_cnt  = self.left.depth()  if self.left  else 0
+        right_cnt = self.right.depth() if self.right else 0
+        return 1 + max(left_cnt, right_cnt)
+
+    def print(self, indent=0):
+        s = '  ' * indent
+        s += 'j:{} s:{} c:{}'.format(self.j, self.s, self.c)
+        print(s)
+        if self.left:
+            self.left.print(indent + 1)
+        if self.right:
+            self.right.print(indent + 1)
+
+    def printLDR(self):
+        if self.left:
+            self.left.printLDR()
+
+        print(self.s)
+
+        if self.right:
+            self.right.printLDR()
 
 class MyDecisionTreeRegressor(object):
     """docstring for MyDecisionTreeRegressor"""
     def __init__(self, max_depth=5, num_split=10):
         super(MyDecisionTreeRegressor, self).__init__()
-        self.j_li = []
-        self.s_li = []
-        self.c_li = []
+        self.root = None
         self.max_depth = max_depth
         self.num_split = num_split
 
@@ -79,72 +126,73 @@ class MyDecisionTreeRegressor(object):
                 y2.append(y[i])
         return np.array(X1), np.array(y1), np.array(X2), np.array(y2)
 
-    def fit(self, X, y):
-
+    def fit(self, X, y, curNode=None, position=None):
         j, s, c = self.calc_j_s_c(X, y)
-        
-        self.j_li.append(j)
-        self.s_li.append(s)
-        self.c_li.append(c)
+
+        newNode = Node(j, s, c, self.root)
+
+        if not self.root:
+            self.root = newNode
+        elif position == 'left':
+            curNode.left = newNode
+        elif position == 'right':
+            curNode.right = newNode
 
         X1, y1, X2, y2 = MyDecisionTreeRegressor.split_dt(X, y, j, s, c) 
 
-        # print('debug: j {} s {} c {}'.format(self.j_li, self.s_li, self.c_li))
-        if len(y1) >= 2 and len(y2) >= 2 and self.max_depth > 0:
-            self.max_depth -= 1
-            self.fit(X1, y1)
-            self.fit(X2, y2)
-            pass
+        # print('debug: depth {} j{} y1 {} y2 {} '.format(newNode.depth(), s, y1, y2))
+        if len(y1) >= 2 and len(y2) >= 2 and newNode and newNode.depth() <= self.max_depth:
+            self.fit(X1, y1, curNode=newNode, position='left')
+            self.fit(X2, y2, curNode=newNode, position='right')
 
     def predict(self, X):
-        assert len(self.j_li) == len(self.s_li) == len(self.c_li)
+        assert self.root
         y_li = []
         for x in X:
             index = 0
-            y = self.c_li[index][0]
-
+            curNode = self.root
+            y = curNode.c[0]
             while True:
-                if index >= len(self.c_li):
-                    break
-                j = self.j_li[index]
-                s = self.s_li[index]
-                y = self.c_li[index][0]
-
-                # print('rich index:{} j:{} s:{} x[j]:{} y:{} c:{}'.format(index, j, s, x[j], y, self.c_li))
-
-                if x[j] < s:
-                    # print('left')
-                    y = self.c_li[index][0]
-                    next_index = index * 2 + 1
-                    if next_index >= len(self.c_li):
-                        y = self.c_li[index][0]
-                        break
+                if x[curNode.j] < curNode.s:
+                    if curNode.left:
+                        curNode = curNode.left
                     else:
-                        index = next_index
+                        y = curNode.c[0]
+                        break
                 else:
-                    # print('right')
-                    y = self.c_li[index][0]
-                    next_index = index * 2 + 2
-                    if next_index >= len(self.c_li):
-                        y = self.c_li[index][1]
-                        break
+                    if curNode.right:
+                        curNode = curNode.right
                     else:
-                        index = next_index
-
-
+                        y = curNode.c[1]
+                        break
             y_li.append(y)
         return np.array(y_li)
 
-X = iris.data[:500, :]
-y = iris.target[:500]
+    def print(self):
+        self.root.print()
 
-max_depth = 1
+    def printLDR(self):
+        self.root.printLDR()
+iris = load_iris()
+
+n = 50
+X = np.array([[i] for i in range(n)])
+y = np.array([i for i in range(n)])
+
+# X = iris.data[0:130,:]
+# y = iris.target[0:130]
+
+max_depth = 3
 
 dt = MyDecisionTreeRegressor(max_depth=max_depth, num_split=10)
 dt.fit(X, y)
+dt.print()
+# dt.printLDR()
+# print(dt.predict(X))
 print('my decision tree MSE', np.mean((y - dt.predict(X)) ** 2))
 
 clf = tree.DecisionTreeRegressor(max_depth=max_depth)
 clf = clf.fit(X, y)
+# print(clf.predict(X))
 print('sklearn decision tree MSE', np.mean((y - clf.predict(X)) ** 2))
 
