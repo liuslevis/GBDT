@@ -168,9 +168,6 @@ class MyDecisionTreeRegressor(object):
             y_li.append(y)
         return np.array(y_li)
 
-    def print(self):
-        self.root.print()
-
     def printLDR(self):
         self.root.printLDR()
 iris = load_iris()
@@ -186,7 +183,7 @@ max_depth = 3
 
 dt = MyDecisionTreeRegressor(max_depth=max_depth, num_split=10)
 dt.fit(X, y)
-dt.print()
+dt.root.print()
 # dt.printLDR()
 # print(dt.predict(X))
 print('my decision tree MSE', np.mean((y - dt.predict(X)) ** 2))
