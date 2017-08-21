@@ -56,14 +56,15 @@ class Node(object):
         if self.right:
             self.right.print(indent + 1)
 
-    def printLDR(self):
+    def print_mid_order(self):
         if self.left:
-            self.left.printLDR()
+            self.left.print_mid_order()
 
         print(self.s)
 
         if self.right:
-            self.right.printLDR()
+            self.right.print_mid_order()
+
 
 class MyDecisionTreeRegressor(object):
     """docstring for MyDecisionTreeRegressor"""
@@ -168,11 +169,54 @@ class MyDecisionTreeRegressor(object):
             y_li.append(y)
         return np.array(y_li)
 
-    def printLDR(self):
-        self.root.printLDR()
+    def print_mid_order(self):
+        self.root.print_mid_order()
+
+
+class MyBoostingDecisionTreeRegressor(object):
+    def __init__(self, num_tree=3, max_depth=5, num_split=10):
+        super(MyBoostingDecisionTreeRegressor, self).__init__()
+        self.max_depth = max_depth
+        self.num_split = num_split
+        self.num_tree = num_tree
+        self.trees = []
+
+    def fit(self, X, y):
+        # T1
+        t0 = MyDecisionTreeRegressor(self.max_depth, self.num_split)
+        t0.fit(X, y)
+        self.trees.append(t0)
+        residual = y - t0.predict(X)
+
+        for i in range(self.max_depth - 1):
+            t1 = self.trees[i]
+            t2 = MyDecisionTreeRegressor(self.max_depth, self.num_split)
+            t2.fit(X, residual)
+            self.trees.append(t2)
+            residual -= t2.predict(X)
+
+    def predict(self, X):
+        Y = np.zeros(X.shape[0])
+        for ti in self.trees:
+            Y += ti.predict(X)
+        return Y
+
+class MyGBDTRegressor(MyBoostingDecisionTreeRegressor):
+    """docstring for MyGBDTRegressor
+    When loss is mean square loss, the GBDT are in form of Boosting Decision Tree
+
+    """
+    def __init__(self, num_tree=3, max_depth=5, num_split=10):
+        super(MyGBDTRegressor, self).__init__()
+        self.max_depth = max_depth
+        self.num_split = num_split
+        self.num_tree = num_tree
+        self.trees = []
+
+
 iris = load_iris()
 
-n = 50
+n = 10
 X = np.array([[i] for i in range(n)])
 y = np.array([i for i in range(n)])
 
@@ -180,16 +224,24 @@ y = np.array([i for i in range(n)])
 # y = iris.target[0:130]
 
 max_depth = 3
-
-dt = MyDecisionTreeRegressor(max_depth=max_depth, num_split=10)
+num_tree = 10
+num_split = 100
+dt = MyDecisionTreeRegressor(max_depth=max_depth, num_split=num_split)
 dt.fit(X, y)
-dt.root.print()
-# dt.printLDR()
+# dt.root.print()
 # print(dt.predict(X))
-print('my decision tree MSE', np.mean((y - dt.predict(X)) ** 2))
+print('MyDecisionTreeRegressor MSE', np.mean((y - dt.predict(X)) ** 2))
+
+bdt = MyBoostingDecisionTreeRegressor(num_tree=num_tree, max_depth=max_depth, num_split=num_split)
+bdt.fit(X, y)
+print('MyBoostingDecisionTreeRegressor MSE', np.mean((y - bdt.predict(X)) ** 2))
+
+gbdt = MyGBDTRegressor(num_tree=num_tree, max_depth=max_depth, num_split=num_split)
+gbdt.fit(X, y)
+print('MyGBDT MSE', np.mean((y - gbdt.predict(X)) ** 2))
 
 clf = tree.DecisionTreeRegressor(max_depth=max_depth)
 clf = clf.fit(X, y)
 # print(clf.predict(X))
-print('sklearn decision tree MSE', np.mean((y - clf.predict(X)) ** 2))
+print('sklearn.DecisionTreeRegressor MSE', np.mean((y - clf.predict(X)) ** 2))
 
